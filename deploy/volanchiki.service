@@ -1,0 +1,17 @@
+# /etc/systemd/system/volanchiki.service
+[Unit]
+Description=Volanchiki API
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/volanchiki
+ExecStart=/usr/bin/dotnet /opt/volanchiki/publish/Volanchiki.Api.dll
+Restart=always
+RestartSec=3
+User=www-data
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5080
+Environment=ASPNETCORE_ENVIRONMENT=Production
+# LLM_API_KEY и остальное берутся из /opt/volanchiki/.env (его читает приложение)
+
+[Install]
+WantedBy=multi-user.target
