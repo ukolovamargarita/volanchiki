@@ -1,0 +1,42 @@
+# secrets
+.env
+.env.local
+*.pem
+
+# IDE / OS
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# build
+bin/
+obj/
+out/
+dist/
+node_modules/
+*.dll
+*.pdb
+
+# logs / temp
+logs/
+*.log
+tmp/
+.cache/
+
+.venv/
+__pycache__/
+*.pyc
+
+# local data caches / vectors
+data/cache/
+data/vectors/
+*.db
+*.sqlite
+/input_data
+shortinfo.md
+Альфа Хак_Новостная аналитика.pdf

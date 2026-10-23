@@ -1,0 +1,18 @@
+@host = http://localhost:5080
+
+GET {{host}}/api/health
+
+###
+GET {{host}}/api/companies/demo?take=5
+
+###
+GET {{host}}/api/companies/U_67
+
+###
+POST {{host}}/api/insights/run
+Content-Type: application/json
+
+{
+  "companyId": "U_67",
+  "newsHint": "Сохранение ключевой ставки ЦБ на уровне 14%"
+}

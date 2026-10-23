@@ -1,0 +1,150 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "volanchiki",
+    "description": "Локальный API. Сначала: dotnet run --project src/Volanchiki.Api --launch-profile http",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "host",
+      "value": "localhost"
+    },
+    {
+      "key": "port",
+      "value": "5080"
+    },
+    {
+      "key": "companyId",
+      "value": "U_21481"
+    }
+  ],
+  "item": [
+    {
+      "name": "health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/health",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "health"]
+        },
+        "description": "dataLoaded / alfaLoaded / llmConfigured = true"
+      },
+      "response": []
+    },
+    {
+      "name": "companies demo",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/companies/demo?take=5",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "companies", "demo"],
+          "query": [
+            {
+              "key": "take",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "company by id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/companies/{{companyId}}",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "companies", "{{companyId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "companies search",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/companies?q=&take=10",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "companies"],
+          "query": [
+            {
+              "key": "q",
+              "value": ""
+            },
+            {
+              "key": "take",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "insights run (ставка 14%)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"newsHint\": \"Сохранение ключевой ставки ЦБ на уровне 14%\"\n}"
+        },
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/insights/run",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "insights", "run"]
+        },
+        "description": "20-90 sec. Trace: profile -> search_alfa -> draft"
+      },
+      "response": []
+    },
+    {
+      "name": "insights run (гипотеза 20%)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"newsHint\": \"Увеличение ключевой ставки ЦБ до уровня 20%\"\n}"
+        },
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/insights/run",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "insights", "run"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
