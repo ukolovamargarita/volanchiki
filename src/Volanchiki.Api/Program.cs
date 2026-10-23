@@ -40,7 +40,13 @@ builder.Services.AddCors(c =>
 var app = builder.Build();
 
 app.UseCors();
+
+// Если рядом лежит собранный фронтенд (wwwroot, как в Docker-образе), отдаём его же
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
