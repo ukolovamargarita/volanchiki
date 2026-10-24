@@ -6,7 +6,13 @@ import { Workspace } from "./components/Workspace";
 
 type View = "home" | "insights";
 
-const NAV = ["Главная", "Счета и платежи", "Кредиты", "Валюта", "Документы", "Аналитика"];
+const NAV = [
+  { id: "home", label: "Главная" },
+  { id: "accounts", label: "Счета" },
+  { id: "payments", label: "Платежи" },
+  { id: "credits", label: "Кредиты" },
+  { id: "docs", label: "Документы" },
+] as const;
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -26,63 +32,90 @@ export default function App() {
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="logo" onClick={() => setView("home")} role="button" tabIndex={0}>
-          <span className="logo-mark">А</span>
-          <span>Альфа-Бизнес</span>
-        </div>
-        <nav>
-          {NAV.map((n, i) => (
-            <button key={n} className={"nav-item" + (i === 0 && view === "home" ? " active" : "")} onClick={() => i === 0 && setView("home")}>
-              {n}
-            </button>
-          ))}
-          <button className={"nav-item accent" + (view === "insights" ? " active" : "")} onClick={() => open()}>
-            <span className="dot" /> Новостные инсайты
+      <header className="topnav">
+        <div className="topnav-inner">
+          <button className="brand" onClick={() => setView("home")} type="button">
+            <span className="brand-mark" aria-hidden>
+              А
+            </span>
+            <span className="brand-text">
+              <span className="brand-name">Альфа-Бизнес</span>
+              <span className="brand-sub">Интернет-банк</span>
+            </span>
           </button>
-        </nav>
-        <div className="sidebar-foot">
-          <StatusPill health={health} err={healthErr} />
+
+          <nav className="topnav-links" aria-label="Разделы">
+            {NAV.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className={"topnav-link" + (n.id === "home" && view === "home" ? " is-active" : "")}
+                onClick={() => n.id === "home" && setView("home")}
+              >
+                {n.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={"topnav-link topnav-link--feature" + (view === "insights" ? " is-active" : "")}
+              onClick={() => open()}
+            >
+              Инсайты
+            </button>
+          </nav>
+
+          <div className="topnav-meta">
+            {USE_MOCK && <span className="pill pill--demo">демо</span>}
+            <StatusPill health={health} err={healthErr} />
+          </div>
         </div>
-      </aside>
+      </header>
 
       <main className="main">
-        <header className="topbar">
-          <div>
-            <div className="eyebrow">{view === "home" ? "Главная" : "Новостные инсайты"}</div>
-            <h1>{view === "home" ? "Добрый день" : "Что новость значит для вашего бизнеса"}</h1>
-          </div>
-          {USE_MOCK && <span className="mock-flag">демо-режим без сервера</span>}
-        </header>
-
         {view === "home" ? (
-          <div className="home-grid">
+          <>
             <NewsWidget onOpen={open} />
-            <FakeCard title="Остатки на счетах" value="1 284 560 000 ₽" note="по всем счетам" />
-            <FakeCard title="Платежи сегодня" value="37" note="12 ожидают подписи" />
-          </div>
+            <section className="dash-strip" aria-label="Сводка">
+              <div className="dash-item">
+                <div className="dash-label">Остатки на счетах</div>
+                <div className="dash-value">1 284 560 000 ₽</div>
+                <div className="dash-note">по всем счетам</div>
+              </div>
+              <div className="dash-item">
+                <div className="dash-label">Платежи сегодня</div>
+                <div className="dash-value">37</div>
+                <div className="dash-note">12 ожидают подписи</div>
+              </div>
+              <div className="dash-item dash-item--action">
+                <div className="dash-label">Новостные инсайты</div>
+                <p className="dash-copy">Персональная оценка событий рынка для вашей компании</p>
+                <button type="button" className="btn btn--ghost" onClick={() => open()}>
+                  Перейти
+                </button>
+              </div>
+            </section>
+          </>
         ) : (
-          <Workspace initialEvent={presetEvent} />
+          <>
+            <div className="page-head">
+              <button type="button" className="back-link" onClick={() => setView("home")}>
+                ← Главная
+              </button>
+              <h1 className="page-title">Новостные инсайты</h1>
+              <p className="page-lead">Что событие означает для вашего бизнеса — с опорой на аналитику Альфа-Банка</p>
+            </div>
+            <Workspace initialEvent={presetEvent} />
+          </>
         )}
       </main>
     </div>
   );
 }
 
-function FakeCard({ title, value, note }: { title: string; value: string; note: string }) {
-  return (
-    <section className="card fake">
-      <div className="muted">{title}</div>
-      <div className="big">{value}</div>
-      <div className="muted small">{note}</div>
-    </section>
-  );
-}
-
 function StatusPill({ health, err }: { health: Health | null; err: boolean }) {
-  if (err) return <div className="status bad">API недоступен</div>;
-  if (!health) return <div className="status">Проверка API…</div>;
-  if (!health.dataLoaded) return <div className="status warn">Данные загружаются…</div>;
-  if (!health.llmConfigured) return <div className="status warn">LLM-ключ не задан</div>;
-  return <div className="status ok">API онлайн · {health.companies.toLocaleString("ru-RU")} компаний</div>;
+  if (err) return <span className="pill pill--bad">API недоступен</span>;
+  if (!health) return <span className="pill">Проверка…</span>;
+  if (!health.dataLoaded) return <span className="pill pill--warn">Данные…</span>;
+  if (!health.llmConfigured) return <span className="pill pill--warn">Нет LLM-ключа</span>;
+  return <span className="pill pill--ok">{health.companies.toLocaleString("ru-RU")} компаний</span>;
 }

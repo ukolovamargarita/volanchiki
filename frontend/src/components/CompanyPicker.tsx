@@ -19,7 +19,6 @@ export function CompanyPicker({ selected, onSelect }: { selected?: string; onSel
         req
           .then((list) => {
             setItems(list);
-            // автовыбор первой демо-компании, чтобы экран не был пустым
             if (first.current && list.length && !selected) onSelect(list[0]);
             first.current = false;
           })
@@ -33,8 +32,8 @@ export function CompanyPicker({ selected, onSelect }: { selected?: string; onSel
   }, [q]);
 
   return (
-    <section className="card">
-      <h3>1. Выберите компанию</h3>
+    <section className="panel">
+      <h3>1. Компания</h3>
       <input
         className="input"
         placeholder="Поиск по ID или виду деятельности"
@@ -46,7 +45,7 @@ export function CompanyPicker({ selected, onSelect }: { selected?: string; onSel
       <ul className="company-list">
         {items.map((c) => (
           <li key={c.id}>
-            <button className={"company-item" + (c.id === selected ? " active" : "")} onClick={() => onSelect(c)}>
+            <button type="button" className={"company-item" + (c.id === selected ? " is-active" : "")} onClick={() => onSelect(c)}>
               <div className="company-title">{c.okvedName ?? "Вид деятельности не указан"}</div>
               <div className="muted small">
                 {c.id} · {c.city ?? c.region ?? "—"} · {money(c.revenue)}

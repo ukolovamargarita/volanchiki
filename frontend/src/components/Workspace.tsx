@@ -42,13 +42,19 @@ export function Workspace({ initialEvent }: { initialEvent?: string }) {
         {company && <CompanyProfile companyId={company.id} />}
       </div>
       <div className="col right">
-        <EventPicker initial={initialEvent} disabled={running || !company} onRun={run} />
+        <EventPicker
+          initial={initialEvent}
+          companyId={company?.id}
+          disabled={running || !company}
+          busy={running}
+          onRun={run}
+        />
         {running && <RunProgress />}
         {err && (
-          <section className="card error-card">
+          <section className="panel panel--error">
             <h3>Не получилось</h3>
             <p>{err}</p>
-            <p className="muted small">Проверьте, что бэкенд запущен и в нём задан LLM_API_KEY, и повторите.</p>
+            <p className="muted small">Проверьте, что бэкенд запущен и задан LLM_API_KEY.</p>
           </section>
         )}
         {result && company && <InsightView result={result} companyName={company.okvedName ?? company.id} />}

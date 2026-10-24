@@ -1,5 +1,5 @@
-import type { Company, CompanyDetails, Health, RunResult } from "./types";
-import { mockCompanies, mockDetails, mockHealth, mockRun } from "./mock";
+import type { Company, CompanyDetails, Health, NewsFeed, RunResult } from "./types";
+import { mockCompanies, mockDetails, mockHealth, mockNews, mockRun } from "./mock";
 
 // VITE_USE_MOCK=true  -> всё работает на заглушках (npm run dev:mock), бэкенд не нужен
 // VITE_API_BASE       -> если API на другом домене (по умолчанию тот же origin, /api)
@@ -43,6 +43,16 @@ export const api = {
 
   company: (id: string): Promise<CompanyDetails> =>
     USE_MOCK ? mockDetails(id) : http(`/api/companies/${encodeURIComponent(id)}`),
+
+  news: (opts?: { q?: string; companyId?: string; take?: number }): Promise<NewsFeed> => {
+    if (USE_MOCK) return mockNews(opts);
+    const p = new URLSearchParams();
+    if (opts?.q) p.set("q", opts.q);
+    if (opts?.companyId) p.set("companyId", opts.companyId);
+    if (opts?.take) p.set("take", String(opts.take));
+    const qs = p.toString();
+    return http(`/api/news${qs ? `?${qs}` : ""}`);
+  },
 
   // Агент работает 20–90 сек, поэтому таймаут большой
   runInsight: (companyId: string, newsHint: string): Promise<RunResult> =>

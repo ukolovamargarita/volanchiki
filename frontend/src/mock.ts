@@ -1,6 +1,7 @@
 // Заглушки для разработки без бэкенда: npm run dev:mock
 // Тексты вымышленные, только чтобы показать, как выглядит интерфейс.
-import type { Company, CompanyDetails, Health, RunResult } from "./types";
+import { PRESET_EVENTS } from "./events";
+import type { Company, CompanyDetails, Health, NewsFeed, RunResult } from "./types";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -66,6 +67,24 @@ export async function mockDetails(id: string): Promise<CompanyDetails> {
   };
 }
 
+export async function mockNews(opts?: { take?: number }): Promise<NewsFeed> {
+  await wait(250);
+  const take = opts?.take ?? 8;
+  const items = PRESET_EVENTS.slice(0, take).map((e, i) => ({
+    id: e.id,
+    source: "Демо",
+    title: e.title,
+    summary: e.text,
+    url: null,
+    category: e.tag,
+    publishedAt: new Date(Date.now() - i * 3600_000).toISOString(),
+    score: 10 - i,
+    isSeed: true,
+    text: e.text,
+  }));
+  return { items, meta: { total: items.length, live: 0 } };
+}
+
 export async function mockRun(companyId: string, newsHint: string): Promise<RunResult> {
   await wait(3500);
   const c = COMPANIES.find((x) => x.id === companyId) ?? COMPANIES[0];
@@ -97,10 +116,11 @@ export async function mockRun(companyId: string, newsHint: string): Promise<RunR
     trace: [
       { step: 1, action: "start", at: new Date().toISOString(), detail: "company=" + c.id },
       { step: 2, action: "tool", tool: "get_company_profile", detail: "need profile", at: new Date().toISOString() },
-      { step: 3, action: "tool", tool: "search_alfa_analytics", detail: "need alfa", at: new Date().toISOString() },
-      { step: 4, action: "tool", tool: "draft_insight", detail: "need draft", at: new Date().toISOString() },
-      { step: 5, action: "self_check", detail: "ok", at: new Date().toISOString() },
-      { step: 6, action: "done", at: new Date().toISOString() },
+      { step: 3, action: "tool", tool: "search_news", detail: "need news", at: new Date().toISOString() },
+      { step: 4, action: "tool", tool: "search_alfa_analytics", detail: "need alfa", at: new Date().toISOString() },
+      { step: 5, action: "tool", tool: "draft_insight", detail: "need draft", at: new Date().toISOString() },
+      { step: 6, action: "self_check", detail: "ok", at: new Date().toISOString() },
+      { step: 7, action: "done", at: new Date().toISOString() },
     ],
   };
 }

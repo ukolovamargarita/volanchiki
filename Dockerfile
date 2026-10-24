@@ -1,5 +1,3 @@
-# Единый способ запуска: бэкенд (.NET 8) + собранный фронтенд в одном образе.
-# docker compose up --build  ->  http://localhost:8080
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY frontend/package*.json ./

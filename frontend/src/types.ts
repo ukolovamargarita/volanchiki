@@ -82,5 +82,31 @@ export interface Health {
   dataLoaded: boolean;
   companies: number;
   alfaDocs: number;
+  newsCount?: number;
+  newsLive?: number;
   llmConfigured: boolean;
+}
+
+export interface NewsItem {
+  id: string;
+  source: string;
+  title: string;
+  summary: string;
+  url?: string | null;
+  category: string;
+  publishedAt: string;
+  score: number;
+  isSeed: boolean;
+  text: string;
+}
+
+export interface NewsFeed {
+  items: NewsItem[];
+  meta: {
+    total: number;
+    live: number;
+    lastSuccessUtc?: string | null;
+    lastAttemptUtc?: string | null;
+    lastError?: string | null;
+  };
 }

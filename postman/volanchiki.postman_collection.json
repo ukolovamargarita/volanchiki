@@ -98,6 +98,27 @@
       "response": []
     },
     {
+      "name": "news feed",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/news?take=10&companyId={{companyId}}",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "news"],
+          "query": [
+            { "key": "take", "value": "10" },
+            { "key": "companyId", "value": "{{companyId}}" },
+            { "key": "q", "value": "", "disabled": true }
+          ]
+        },
+        "description": "RSS-лента; meta.live > 0 если фиды ответили"
+      },
+      "response": []
+    },
+    {
       "name": "insights run (ставка 14%)",
       "request": {
         "method": "POST",
@@ -118,7 +139,7 @@
           "port": "{{port}}",
           "path": ["api", "insights", "run"]
         },
-        "description": "20-90 sec. Trace: profile -> search_alfa -> draft"
+        "description": "20-90 sec. Trace: profile -> search_news -> search_alfa -> draft"
       },
       "response": []
     },

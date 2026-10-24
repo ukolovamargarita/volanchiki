@@ -4,7 +4,11 @@ import { SOURCE_LABELS } from "../format";
 import { Badge } from "./Badge";
 import { TracePanel } from "./TracePanel";
 
-const REL: Record<string, string> = { high: "Высокая значимость", medium: "Средняя значимость", low: "Низкая значимость" };
+const REL: Record<string, string> = {
+  high: "Высокая значимость",
+  medium: "Средняя значимость",
+  low: "Низкая значимость",
+};
 
 export function InsightView({ result, companyName }: { result: RunResult; companyName: string }) {
   const [vote, setVote] = useState<"up" | "down" | null>(null);
@@ -13,19 +17,19 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
 
   return (
     <div className="insight">
-      <section className="card hero">
-        <div className="row between">
-          <span className={"chip rel " + ins.relevance}>{REL[ins.relevance] ?? ins.relevance}</span>
+      <section className="insight-hero">
+        <div className="insight-hero-meta">
+          <span className={"rel rel--" + ins.relevance}>{REL[ins.relevance] ?? ins.relevance}</span>
           <span className="muted small">{companyName}</span>
         </div>
-        <h2>{ins.title}</h2>
+        <h2 className="insight-title">{ins.title}</h2>
       </section>
 
       <div className="legend">
         <Badge origin="fact" />
         <Badge origin="bank" />
         <Badge origin="ai" />
-        <span className="legend-note">Цвет рамки показывает, откуда информация</span>
+        <span className="legend-note">Метка показывает источник блока</span>
       </div>
 
       <Block n="01" title="Что произошло" origin="fact">
@@ -47,13 +51,13 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
       )}
 
       <div className="two">
-        <ListCard title="Риски" items={ins.risks} />
-        <ListCard title="Возможности" items={ins.opportunities} />
+        <ListBlock title="Риски" items={ins.risks} />
+        <ListBlock title="Возможности" items={ins.opportunities} />
       </div>
 
-      <ListCard title="Что можно сделать" items={ins.suggestedActions} />
+      <ListBlock title="Что можно сделать" items={ins.suggestedActions} />
 
-      <section className="card">
+      <section className="panel">
         <h3>На чём основан вывод</h3>
         <ul className="sources">
           {ins.sources.map((s, i) => (
@@ -61,7 +65,9 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
               <div>
                 <span className="chip">{SOURCE_LABELS[s.kind] ?? s.kind}</span>{" "}
                 {s.url ? (
-                  <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a>
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    {s.title}
+                  </a>
                 ) : (
                   <strong>{s.title}</strong>
                 )}
@@ -75,23 +81,49 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
 
       <TracePanel trace={result.trace} runId={result.runId} />
 
-      <section className="card row between">
+      <section className="panel panel--footer">
         <div className="row">
-          <button className="btn red">{ins.cta}</button>
-          <div className="row">
-            <button className={"icon-btn" + (vote === "up" ? " on" : "")} onClick={() => setVote("up")} aria-label="Полезно">👍</button>
-            <button className={"icon-btn" + (vote === "down" ? " on" : "")} onClick={() => setVote("down")} aria-label="Не полезно">👎</button>
+          <button type="button" className="btn btn--red">
+            {ins.cta}
+          </button>
+          <div className="vote">
+            <button
+              type="button"
+              className={"vote-btn" + (vote === "up" ? " is-on" : "")}
+              onClick={() => setVote("up")}
+              aria-label="Полезно"
+            >
+              Полезно
+            </button>
+            <button
+              type="button"
+              className={"vote-btn" + (vote === "down" ? " is-on" : "")}
+              onClick={() => setVote("down")}
+              aria-label="Не полезно"
+            >
+              Нет
+            </button>
           </div>
         </div>
-        <div className="muted small disclaimer">{ins.disclaimer}</div>
+        <p className="muted small disclaimer">{ins.disclaimer}</p>
       </section>
     </div>
   );
 }
 
-function Block({ n, title, origin, children }: { n: string; title: string; origin: "fact" | "bank" | "ai"; children: React.ReactNode }) {
+function Block({
+  n,
+  title,
+  origin,
+  children,
+}: {
+  n: string;
+  title: string;
+  origin: "fact" | "bank" | "ai";
+  children: React.ReactNode;
+}) {
   return (
-    <section className={"card block tint origin-" + origin}>
+    <section className={"panel block origin-" + origin}>
       <div className="block-head">
         <span className="num">{n}</span>
         <h3>{title}</h3>
@@ -102,10 +134,10 @@ function Block({ n, title, origin, children }: { n: string; title: string; origi
   );
 }
 
-function ListCard({ title, items }: { title: string; items: string[] }) {
+function ListBlock({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;
   return (
-    <section className="card list tint origin-ai">
+    <section className="panel list origin-ai">
       <h3>{title}</h3>
       <ul>
         {items.map((x, i) => (

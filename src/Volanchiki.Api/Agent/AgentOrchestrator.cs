@@ -69,6 +69,15 @@ public class AgentOrchestrator
             if (!session.Scratch.ContainsKey("draft") && _llm.IsConfigured
                 && _tools.TryGetValue("draft_insight", out var ensureDraft))
             {
+                if (!session.Scratch.ContainsKey("news")
+                    && _tools.TryGetValue("search_news", out var ensureNews))
+                {
+                    session.Note("ensure_news");
+                    using var newsArgs = JsonDocument.Parse(
+                        "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}");
+                    await ensureNews.ExecuteAsync(newsArgs.RootElement, session, ct);
+                }
+
                 if (!session.Scratch.ContainsKey("alfa")
                     && _tools.TryGetValue("search_alfa_analytics", out var ensureAlfa))
                 {
@@ -134,6 +143,15 @@ public class AgentOrchestrator
                 "get_company_profile",
                 "{\"company_id\":\"" + session.CompanyId + "\"}",
                 "need profile");
+        }
+
+        if (!session.Scratch.ContainsKey("news"))
+        {
+            return new AgentDecision(
+                "tool",
+                "search_news",
+                "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}",
+                "need news");
         }
 
         if (!session.Scratch.ContainsKey("alfa"))

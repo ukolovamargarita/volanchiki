@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-// Это оценка этапов по времени, а не реальный стрим от бэкенда.
-// Реальные шаги приходят в трассировке после ответа (см. TracePanel).
 const STAGES = [
   "Собираем профиль компании",
   "Ищем позицию Альфа-Банка в аналитике",
@@ -16,11 +14,11 @@ export function RunProgress() {
     return () => clearInterval(t);
   }, []);
   return (
-    <section className="card progress">
-      <div className="spinner" />
+    <section className="panel progress">
+      <div className="spinner" aria-hidden />
       <ol>
         {STAGES.map((s, k) => (
-          <li key={s} className={k < i ? "done" : k === i ? "now" : ""}>
+          <li key={s} className={k < i ? "is-done" : k === i ? "is-now" : ""}>
             {s}
           </li>
         ))}

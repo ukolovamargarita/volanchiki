@@ -2,6 +2,7 @@ using Volanchiki.Api.Agent;
 using Volanchiki.Api.Agent.Tools;
 using Volanchiki.Api.Data;
 using Volanchiki.Api.Llm;
+using Volanchiki.Api.News;
 using Volanchiki.Api.Options;
 
 // .env из корня репо или рядом с api
@@ -21,15 +22,30 @@ builder.Services.Configure<DataPathsOptions>(o =>
                 ?? o.AlfaDir;
 });
 
+builder.Services.Configure<NewsOptions>(builder.Configuration.GetSection(NewsOptions.Section));
+if (int.TryParse(Environment.GetEnvironmentVariable("NEWS_POLL_SECONDS"), out var pollSec) && pollSec > 0)
+    builder.Services.PostConfigure<NewsOptions>(o => o.PollIntervalSeconds = pollSec);
+
 builder.Services.AddSingleton<CompanyStore>();
 builder.Services.AddSingleton<CsvCompanyLoader>();
 builder.Services.AddSingleton<AlfaAnalyticsStore>();
 builder.Services.AddSingleton<AlfaTxtLoader>();
+builder.Services.AddSingleton<NewsStore>();
+builder.Services.AddSingleton<RssNewsParser>();
 builder.Services.AddHostedService<DataWarmupHostedService>();
+builder.Services.AddHostedService<RssNewsIngestionHostedService>();
+
+builder.Services.AddHttpClient("rss", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(25);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("VolanchikiNewsBot/1.0 (+hackathon; RSS reader)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml, application/atom+xml, application/xml, text/xml, */*");
+});
 
 builder.Services.AddLlm(builder.Configuration);
 
 builder.Services.AddScoped<IAgentTool, GetCompanyProfileTool>();
+builder.Services.AddScoped<IAgentTool, SearchNewsTool>();
 builder.Services.AddScoped<IAgentTool, SearchAlfaAnalyticsTool>();
 builder.Services.AddScoped<IAgentTool, DraftInsightTool>();
 builder.Services.AddScoped<AgentOrchestrator>();

@@ -16,6 +16,7 @@ public class DraftInsightTool : IAgentTool
     {
         session.Scratch.TryGetValue("profile", out var profile);
         session.Scratch.TryGetValue("alfa", out var alfa);
+        session.Scratch.TryGetValue("news", out var news);
 
         var topic = session.NewsHint;
         if (args.TryGetProperty("topic", out var t))
@@ -26,15 +27,17 @@ public class DraftInsightTool : IAgentTool
         var system =
             "Ответь только JSON без markdown. Поля: title, what_happened, why_matters_for_company, " +
             "bank_view, model_view, risks[], opportunities[], suggested_actions[], " +
-            "relevance (low|medium|high), sources[{kind,title,excerpt}]. " +
+            "relevance (low|medium|high), sources[{kind,title,excerpt,url}]. " +
+            "what_happened — факты из события и блока news (kind=news, укажи url если есть). " +
             "why_matters_for_company — по признакам компании. " +
-            "bank_view — только из блока аналитики банка (цитируй файл/фрагмент), иначе скажи что опоры нет. " +
+            "bank_view — только из блока аналитики банка (цитируй файл/фрагмент, kind=alfa_analytics), иначе скажи что опоры нет. " +
             "model_view — вывод модели, не позиция банка. Цифры не выдумывай.";
 
         var user =
             $"company={session.CompanyId}\n" +
             $"event={topic}\n\n" +
             $"profile:\n{profile ?? "(empty)"}\n\n" +
+            $"news:\n{news ?? "(empty)"}\n\n" +
             $"alfa_analytics:\n{alfa ?? "(empty)"}";
 
         var raw = await _llm.ChatAsync(
