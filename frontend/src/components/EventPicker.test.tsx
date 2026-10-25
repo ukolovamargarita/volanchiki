@@ -26,9 +26,15 @@ describe("EventPicker", () => {
     expect(newsMock).toHaveBeenCalledWith({ companyId: "U_1", take: 12 });
   });
 
-  it("reports how many news are live", async () => {
+  it("shows how many news are in the feed and how many came in total", async () => {
     render(<EventPicker disabled={false} onRun={() => {}} />);
-    expect(await screen.findByText(/RSS · 2 живых из 5/)).toBeInTheDocument();
+    expect(await screen.findByText(/экономика · 2 в ленте · 5 всего/)).toBeInTheDocument();
+  });
+
+  it("shows the business count when the backend reports it", async () => {
+    newsMock.mockResolvedValue({ ...newsFeed, meta: { total: 5, live: 2, business: 3 } as typeof newsFeed.meta });
+    render(<EventPicker disabled={false} onRun={() => {}} />);
+    expect(await screen.findByText(/экономика · 2 в ленте · 3 бизнес из 5/)).toBeInTheDocument();
   });
 
   it("says the feed is offline demo when nothing live came in", async () => {
