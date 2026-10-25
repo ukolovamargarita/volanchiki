@@ -43,7 +43,7 @@ public class SearchAlfaAnalyticsTool : IAgentTool
             }),
         };
 
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, TraceSummary.JsonOpts);
         session.Scratch["alfa"] = json;
         return Task.FromResult(json);
     }

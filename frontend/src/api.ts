@@ -6,6 +6,20 @@ import { mockCompanies, mockDetails, mockHealth, mockNews, mockRun } from "./moc
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const BASE: string = import.meta.env.VITE_API_BASE ?? "";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function isNetworkError(e: unknown): boolean {
+  if (e instanceof TypeError) return true; // Failed to fetch / NetworkError
+  if (e instanceof DOMException && e.name === "AbortError") return true;
+  const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+  return (
+    msg.includes("failed to fetch") ||
+    msg.includes("network") ||
+    msg.includes("load failed") ||
+    msg.includes("сетев")
+  );
+}
+
 async function http<T>(path: string, init?: RequestInit, timeoutMs = 20000): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -32,6 +46,63 @@ async function http<T>(path: string, init?: RequestInit, timeoutMs = 20000): Pro
   }
 }
 
+/** Короткий запрос с повторами при обрыве сети (смена Wi‑Fi ↔ мобильный). */
+async function httpResilient<T>(path: string, init?: RequestInit, timeoutMs = 20000, attempts = 5): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await http<T>(path, init, timeoutMs);
+    } catch (e) {
+      last = e;
+      if (!isNetworkError(e) || i === attempts - 1) throw e;
+      await sleep(800 * (i + 1));
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+}
+
+type StartRunResponse = { runId: string; status: string };
+
+async function runInsightLive(companyId: string, newsHint: string): Promise<RunResult> {
+  const start = await httpResilient<StartRunResponse>(
+    "/api/insights/run",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ companyId, newsHint }),
+    },
+    30000,
+    5,
+  );
+
+  if (!start?.runId) throw new Error("Сервер не вернул runId");
+
+  const deadline = Date.now() + 180_000;
+  let netFails = 0;
+
+  while (Date.now() < deadline) {
+    await sleep(1500);
+    try {
+      const r = await http<RunResult>(`/api/insights/runs/${encodeURIComponent(start.runId)}`, undefined, 20000);
+      netFails = 0;
+      if (r.status === "running") continue;
+      return r;
+    } catch (e) {
+      // обрыв на одном poll — считаем дальше, задача на сервере жива
+      if (isNetworkError(e)) {
+        netFails++;
+        if (netFails >= 25) {
+          throw new Error("Сеть нестабильна слишком долго. Обновите страницу — если расчёт успел завершиться, попробуйте ещё раз.");
+        }
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  throw new Error("Расчёт занял слишком много времени. Попробуйте ещё раз.");
+}
+
 export const api = {
   health: (): Promise<Health> => (USE_MOCK ? mockHealth() : http("/api/health")),
 
@@ -54,17 +125,7 @@ export const api = {
     return http(`/api/news${qs ? `?${qs}` : ""}`);
   },
 
-  // Агент работает 20–90 сек, поэтому таймаут большой
+  // Старт + poll: смена сети не роняет уже идущий прогон на сервере
   runInsight: (companyId: string, newsHint: string): Promise<RunResult> =>
-    USE_MOCK
-      ? mockRun(companyId, newsHint)
-      : http(
-          "/api/insights/run",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json; charset=utf-8" },
-            body: JSON.stringify({ companyId, newsHint }),
-          },
-          180000,
-        ),
+    USE_MOCK ? mockRun(companyId, newsHint) : runInsightLive(companyId, newsHint),
 };

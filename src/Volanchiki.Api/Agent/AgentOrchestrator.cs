@@ -62,7 +62,7 @@ public class AgentOrchestrator
                 session.Scratch["last_" + tool.Name] = result;
                 if (tool.Name == "draft_insight")
                     session.Scratch["draft"] = result;
-                session.Note("tool_result", tool.Name, result);
+                session.Note("tool_result", tool.Name, TraceSummary.ForTool(tool.Name, result));
             }
 
             // без draft — дожимаем сами (LLM-планировщик часто его пропускает)

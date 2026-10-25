@@ -34,6 +34,8 @@ public class HealthController : ControllerBase
             alfaDocs = _alfa.DocCount,
             newsCount = _news.Count,
             newsLive = _news.LiveCount,
+            newsBusiness = _news.BusinessCount,
+            newsPendingLlm = _news.PendingLlmCount,
             newsLastSuccessUtc = _news.LastSuccessUtc,
             llmConfigured = _llm.IsConfigured,
             utc = DateTimeOffset.UtcNow,

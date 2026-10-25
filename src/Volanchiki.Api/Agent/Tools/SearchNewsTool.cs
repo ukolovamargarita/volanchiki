@@ -36,12 +36,13 @@ public class SearchNewsTool : IAgentTool
                 company.OkvedName, company.OkvedCode, company.City, company.Region);
         }
 
-        var hits = _news.Search(query, take, companyContext);
+        var hits = _news.Search(query, take, companyContext, businessOnly: true);
         var payload = new
         {
             query,
             count = _news.Count,
             live = _news.LiveCount,
+            business = _news.BusinessCount,
             hits = hits.Select(h => new
             {
                 id = h.Item.Id,
@@ -50,13 +51,14 @@ public class SearchNewsTool : IAgentTool
                 summary = h.Item.Summary,
                 url = h.Item.Url,
                 category = h.Item.Category,
+                businessRelevant = h.Item.BusinessRelevant,
                 publishedAt = h.Item.PublishedAt,
                 score = h.Score,
                 isSeed = h.Item.IsSeed,
             }),
         };
 
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, TraceSummary.JsonOpts);
         session.Scratch["news"] = json;
         return Task.FromResult(json);
     }

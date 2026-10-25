@@ -19,8 +19,8 @@ public class AgentSession
 
     public void Note(string action, string? tool = null, string? detail = null)
     {
-        if (detail != null && detail.Length > 800)
-            detail = detail.Substring(0, 800) + "...";
+        if (detail != null && detail.Length > 1200)
+            detail = detail.Substring(0, 1200) + "…";
 
         Trace.Add(new Domain.AgentTraceStep
         {

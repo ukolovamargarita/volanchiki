@@ -31,7 +31,9 @@ builder.Services.AddSingleton<CsvCompanyLoader>();
 builder.Services.AddSingleton<AlfaAnalyticsStore>();
 builder.Services.AddSingleton<AlfaTxtLoader>();
 builder.Services.AddSingleton<NewsStore>();
+builder.Services.AddSingleton<InsightRunStore>();
 builder.Services.AddSingleton<RssNewsParser>();
+builder.Services.AddSingleton<NewsLlmClassifier>();
 builder.Services.AddHostedService<DataWarmupHostedService>();
 builder.Services.AddHostedService<RssNewsIngestionHostedService>();
 

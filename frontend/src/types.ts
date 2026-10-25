@@ -105,6 +105,7 @@ export interface NewsFeed {
   meta: {
     total: number;
     live: number;
+    business?: number;
     lastSuccessUtc?: string | null;
     lastAttemptUtc?: string | null;
     lastError?: string | null;

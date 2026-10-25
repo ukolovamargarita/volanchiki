@@ -4,12 +4,13 @@ using Volanchiki.Api.Options;
 
 namespace Volanchiki.Api.News;
 
-/// <summary>Фоновый опрос RSS (по умолчанию раз в 3 минуты) — блок «Парсер» кейса.</summary>
+/// <summary>Фоновый опрос RSS + LLM-уточнение рубрик для спорных/Прочее.</summary>
 public class RssNewsIngestionHostedService : BackgroundService
 {
     readonly IHttpClientFactory _httpFactory;
     readonly NewsStore _store;
     readonly RssNewsParser _parser;
+    readonly NewsLlmClassifier _llmClassifier;
     readonly IOptionsMonitor<NewsOptions> _options;
     readonly ILogger<RssNewsIngestionHostedService> _log;
 
@@ -17,12 +18,14 @@ public class RssNewsIngestionHostedService : BackgroundService
         IHttpClientFactory httpFactory,
         NewsStore store,
         RssNewsParser parser,
+        NewsLlmClassifier llmClassifier,
         IOptionsMonitor<NewsOptions> options,
         ILogger<RssNewsIngestionHostedService> log)
     {
         _httpFactory = httpFactory;
         _store = store;
         _parser = parser;
+        _llmClassifier = llmClassifier;
         _options = options;
         _log = log;
     }
@@ -32,7 +35,6 @@ public class RssNewsIngestionHostedService : BackgroundService
         _store.EnsureSeed(RssNewsParser.BuildSeedFallback());
         _log.LogInformation("news: seed ready, live={Live}", _store.LiveCount);
 
-        // первый проход сразу
         await PollOnceAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -75,7 +77,7 @@ public class RssNewsIngestionHostedService : BackgroundService
                 using var res = await client.SendAsync(req, ct);
                 if (!res.IsSuccessStatusCode)
                 {
-                    errors.Add($"{feed.Name}:{ (int)res.StatusCode}");
+                    errors.Add($"{feed.Name}:{(int)res.StatusCode}");
                     continue;
                 }
 
@@ -98,6 +100,16 @@ public class RssNewsIngestionHostedService : BackgroundService
             _store.MarkSuccess();
 
         if (totalNew > 0)
-            _log.LogInformation("news: upserted {New}, total={Total}", totalNew, _store.Count);
+            _log.LogInformation("news: upserted {New}, total={Total}, pendingLlm={Pending}",
+                totalNew, _store.Count, _store.PendingLlmCount);
+
+        // пайплайн: правила уже проставили рубрику; LLM — только спорные / Прочее
+        var llmCap = Math.Clamp(_options.CurrentValue.LlmClassifyPerPoll, 0, 40);
+        if (llmCap > 0 && _store.PendingLlmCount > 0)
+        {
+            var n = await _llmClassifier.ClassifyPendingAsync(llmCap, ct);
+            if (n > 0)
+                _log.LogInformation("news: llm rubrics applied={N}, stillPending={P}", n, _store.PendingLlmCount);
+        }
     }
 }

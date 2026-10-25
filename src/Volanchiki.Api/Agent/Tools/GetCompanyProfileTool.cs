@@ -63,7 +63,7 @@ public class GetCompanyProfileTool : IAgentTool
             }),
         };
 
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, TraceSummary.JsonOpts);
         session.Scratch["profile"] = json;
         return Task.FromResult(json);
     }

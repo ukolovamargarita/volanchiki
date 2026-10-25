@@ -17,6 +17,10 @@
     {
       "key": "companyId",
       "value": "U_21481"
+    },
+    {
+      "key": "runId",
+      "value": ""
     }
   ],
   "item": [
@@ -139,7 +143,23 @@
           "port": "{{port}}",
           "path": ["api", "insights", "run"]
         },
-        "description": "20-90 sec. Trace: profile -> search_news -> search_alfa -> draft"
+        "description": "Сразу runId (202 Accepted). Дальше GET runs/{runId}. Trace: profile -> search_news -> search_alfa -> draft"
+      },
+      "response": []
+    },
+    {
+      "name": "insights run status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{host}}:{{port}}/api/insights/runs/{{runId}}",
+          "protocol": "http",
+          "host": ["{{host}}"],
+          "port": "{{port}}",
+          "path": ["api", "insights", "runs", "{{runId}}"]
+        },
+        "description": "poll until status != running"
       },
       "response": []
     },

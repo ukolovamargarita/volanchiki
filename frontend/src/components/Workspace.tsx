@@ -54,7 +54,10 @@ export function Workspace({ initialEvent }: { initialEvent?: string }) {
           <section className="panel panel--error">
             <h3>Не получилось</h3>
             <p>{err}</p>
-            <p className="muted small">Проверьте, что бэкенд запущен и задан LLM_API_KEY.</p>
+            <p className="muted small">
+              При смене Wi‑Fi ↔ мобильный расчёт на сервере продолжается — подождите или нажмите ещё раз. Также
+              проверьте LLM_API_KEY и что API доступен.
+            </p>
           </section>
         )}
         {result && company && <InsightView result={result} companyName={company.okvedName ?? company.id} />}

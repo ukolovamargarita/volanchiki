@@ -49,19 +49,7 @@ public class RssNewsParser
             ?? el.Element(Dc + "date")?.Value);
 
         summary = StripHtml(summary);
-        var category = NewsClassifier.Classify(title, summary);
-
-        return new NewsItem
-        {
-            Id = StableId(source, guid!),
-            Source = source,
-            Title = title,
-            Summary = Clip(summary, 600),
-            Url = LooksLikeUrl(link) ? link : null,
-            Category = category,
-            PublishedAt = published,
-            IsSeed = false,
-        };
+        return BuildItem(source, guid!, title, summary, LooksLikeUrl(link) ? link : null, published);
     }
 
     static NewsItem? FromAtomEntry(XElement el, string source)
@@ -85,16 +73,25 @@ public class RssNewsParser
             ?? el.Element(Atom + "updated")?.Value);
 
         summary = StripHtml(summary);
-        var category = NewsClassifier.Classify(title, summary);
+        return BuildItem(source, idRaw!, title, summary, LooksLikeUrl(link) ? link : null, published);
+    }
 
+    static NewsItem BuildItem(
+        string source, string rawId, string title, string summary, string? url, DateTimeOffset published)
+    {
+        var ev = NewsClassifier.Evaluate(title, summary);
         return new NewsItem
         {
-            Id = StableId(source, idRaw!),
+            Id = StableId(source, rawId),
             Source = source,
             Title = title,
             Summary = Clip(summary, 600),
-            Url = LooksLikeUrl(link) ? link : null,
-            Category = category,
+            Url = url,
+            Category = ev.Category,
+            BusinessRelevant = ev.BusinessRelevant,
+            NeedsLlm = ev.NeedsLlm,
+            ClassificationSource = ev.Source,
+            RuleCandidates = ev.MatchedTags.ToList(),
             PublishedAt = published,
             IsSeed = false,
         };
@@ -134,6 +131,9 @@ public class RssNewsParser
             Id = id,
             Source = source,
             Category = cat,
+            BusinessRelevant = true,
+            NeedsLlm = false,
+            ClassificationSource = "seed",
             Title = title,
             Summary = summary,
             PublishedAt = at,

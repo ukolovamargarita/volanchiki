@@ -40,9 +40,11 @@ export function EventPicker({
           setNewsErr(false);
           const live = r.meta.live;
           const total = r.meta.total;
+          const biz = (r.meta as { business?: number }).business;
           setNewsMeta(
             live > 0
-              ? `RSS · ${live} живых из ${total}`
+              ? `экономика · ${r.items.length} в ленте` +
+                  (typeof biz === "number" ? ` · ${biz} бизнес из ${total}` : ` · ${total} всего`)
               : total > 0
                 ? `Офлайн-демо · ${total} тем`
                 : "Лента пуста",

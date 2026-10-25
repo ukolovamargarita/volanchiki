@@ -23,6 +23,7 @@ export const SOURCE_LABELS: Record<string, string> = {
 
 export const TOOL_LABELS: Record<string, string> = {
   get_company_profile: "Профиль компании",
+  search_news: "Поиск новостей",
   search_alfa_analytics: "Поиск по аналитике банка",
   draft_insight: "Сбор инсайта",
 };
@@ -33,6 +34,7 @@ export const ACTION_LABELS: Record<string, string> = {
   tool_result: "Результат инструмента",
   self_check: "Самопроверка",
   retry_draft: "Доработка после проверки",
+  ensure_news: "Догрузка новостей",
   ensure_alfa: "Догрузка аналитики банка",
   ensure_draft: "Догрузка черновика",
   skip_draft: "Черновик пропущен",

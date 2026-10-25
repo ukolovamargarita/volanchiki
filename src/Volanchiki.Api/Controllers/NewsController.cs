@@ -23,7 +23,8 @@ public class NewsController : ControllerBase
     public IActionResult List(
         [FromQuery] string? q = null,
         [FromQuery] string? companyId = null,
-        [FromQuery] int take = 20)
+        [FromQuery] int take = 20,
+        [FromQuery] bool businessOnly = true)
     {
         string? companyContext = null;
         if (!string.IsNullOrWhiteSpace(companyId))
@@ -36,7 +37,7 @@ public class NewsController : ControllerBase
             }
         }
 
-        var hits = _news.Search(q, take, companyContext);
+        var hits = _news.Search(q, take, companyContext, businessOnly);
         return Ok(new
         {
             items = hits.Select(h => new
@@ -47,6 +48,8 @@ public class NewsController : ControllerBase
                 summary = h.Item.Summary,
                 url = h.Item.Url,
                 category = h.Item.Category,
+                businessRelevant = h.Item.BusinessRelevant,
+                classificationSource = h.Item.ClassificationSource,
                 publishedAt = h.Item.PublishedAt,
                 score = h.Score,
                 isSeed = h.Item.IsSeed,
@@ -57,6 +60,7 @@ public class NewsController : ControllerBase
             {
                 total = _news.Count,
                 live = _news.LiveCount,
+                business = _news.BusinessCount,
                 lastSuccessUtc = _news.LastSuccessUtc,
                 lastAttemptUtc = _news.LastAttemptUtc,
                 lastError = _news.LastError,
