@@ -25,9 +25,13 @@ public class DraftInsightTool : IAgentTool
             topic = "ключевая ставка ЦБ";
 
         var system =
-            "Ответь только JSON без markdown. Поля: title, what_happened, why_matters_for_company, " +
+            "Ответь только JSON (без markdown-fence). Поля: title, what_happened, why_matters_for_company, " +
             "bank_view, model_view, risks[], opportunities[], suggested_actions[], " +
             "relevance (low|medium|high), sources[{kind,title,excerpt,url}]. " +
+            "Формат текста в what_happened / why_matters_for_company / bank_view / model_view: " +
+            "2–4 коротких абзаца, разделённых \\n\\n; ключевые цифры, ставки, даты, названия " +
+            "выделяй **двойными звёздочками** (пример: ставка **14%**). Не пиши сплошной простынёй. " +
+            "В risks / opportunities / suggested_actions — короткие пункты, тоже можно **акценты**. " +
             "what_happened — факты из события и блока news (kind=news, укажи url если есть). " +
             "why_matters_for_company — по признакам компании. " +
             "bank_view — только из блока аналитики банка (цитируй файл/фрагмент, kind=alfa_analytics), иначе скажи что опоры нет. " +

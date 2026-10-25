@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { RunResult } from "../types";
 import { SOURCE_LABELS } from "../format";
 import { Badge } from "./Badge";
+import { RichInline, RichText } from "./RichText";
 import { TracePanel } from "./TracePanel";
 
 const REL: Record<string, string> = {
@@ -33,20 +34,20 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
       </div>
 
       <Block n="01" title="Что произошло" origin="fact">
-        <p>{ins.whatHappened}</p>
+        <RichText text={ins.whatHappened} />
       </Block>
 
       <Block n="02" title="Почему это важно для вашей компании" origin="ai">
-        <p>{ins.whyMattersForCompany}</p>
+        <RichText text={ins.whyMattersForCompany} />
       </Block>
 
       <Block n="03" title="Как это оценивает Альфа-Банк" origin="bank">
-        <p>{ins.bankView}</p>
+        <RichText text={ins.bankView} />
       </Block>
 
       {ins.modelView && (
         <Block n="04" title="Вывод модели" origin="ai">
-          <p>{ins.modelView}</p>
+          <RichText text={ins.modelView} />
         </Block>
       )}
 
@@ -72,7 +73,11 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
                   <strong>{s.title}</strong>
                 )}
               </div>
-              {s.excerpt && <div className="muted small quote">{s.excerpt}</div>}
+              {s.excerpt && (
+                <div className="muted small quote">
+                  <RichInline text={s.excerpt} />
+                </div>
+              )}
             </li>
           ))}
           {!ins.sources.length && <li className="muted">Источники не указаны моделью</li>}
@@ -141,7 +146,9 @@ function ListBlock({ title, items }: { title: string; items: string[] }) {
       <h3>{title}</h3>
       <ul>
         {items.map((x, i) => (
-          <li key={i}>{x}</li>
+          <li key={i}>
+            <RichInline text={x} />
+          </li>
         ))}
       </ul>
     </section>

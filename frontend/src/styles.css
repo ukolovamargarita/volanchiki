@@ -847,6 +847,30 @@ a {
   flex-wrap: wrap;
 }
 
+.rich {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  max-width: 62ch;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.rich p {
+  margin: 0;
+}
+
+.rich strong,
+.list li strong,
+.quote strong {
+  font-weight: 750;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--alfa-red) 10%, transparent);
+  padding: 0 0.15em;
+  border-radius: 2px;
+}
+
 .block-head h3 {
   margin: 0;
 }
@@ -870,7 +894,12 @@ a {
 .list ul {
   padding-left: 18px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
+}
+
+.list li {
+  line-height: 1.45;
+  max-width: 52ch;
 }
 
 .sources {
