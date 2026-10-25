@@ -10,8 +10,12 @@ static class TestData
         string summary = "",
         DateTimeOffset? published = null,
         bool seed = false,
-        string category = "Прочее") => new()
+        string category = "Прочее",
+        bool needsLlm = false,
+        bool business = false) => new()
     {
+        NeedsLlm = needsLlm,
+        BusinessRelevant = business,
         Id = id,
         Title = title,
         Summary = summary,
