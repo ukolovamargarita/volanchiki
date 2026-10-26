@@ -32,6 +32,7 @@ builder.Services.AddSingleton<AlfaAnalyticsStore>();
 builder.Services.AddSingleton<AlfaTxtLoader>();
 builder.Services.AddSingleton<NewsStore>();
 builder.Services.AddSingleton<InsightRunStore>();
+builder.Services.AddSingleton<InsightRunGuard>();
 builder.Services.AddSingleton<RssNewsParser>();
 builder.Services.AddSingleton<NewsLlmClassifier>();
 builder.Services.AddHostedService<DataWarmupHostedService>();
@@ -52,8 +53,27 @@ builder.Services.AddScoped<IAgentTool, SearchAlfaAnalyticsTool>();
 builder.Services.AddScoped<IAgentTool, DraftInsightTool>();
 builder.Services.AddScoped<AgentOrchestrator>();
 
+var corsOrigins = (Environment.GetEnvironmentVariable("CORS_ORIGINS") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+if (corsOrigins.Length == 0)
+{
+    corsOrigins =
+    [
+        "http://localhost:5173",
+        "http://localhost:5080",
+        "http://localhost:8080",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5080",
+        "http://127.0.0.1:8080",
+        "https://alfa.dev.news.myrelo.ru",
+    ];
+}
+
 builder.Services.AddCors(c =>
-    c.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+    c.AddDefaultPolicy(p => p
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
 
 var app = builder.Build();
 

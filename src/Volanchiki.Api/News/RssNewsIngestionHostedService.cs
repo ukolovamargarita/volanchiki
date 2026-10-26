@@ -104,7 +104,7 @@ public class RssNewsIngestionHostedService : BackgroundService
                 totalNew, _store.Count, _store.PendingLlmCount);
 
         // пайплайн: правила уже проставили рубрику; LLM — только спорные / Прочее
-        var llmCap = Math.Clamp(_options.CurrentValue.LlmClassifyPerPoll, 0, 40);
+        var llmCap = Math.Clamp(_options.CurrentValue.LlmClassifyPerPoll, 0, 80);
         if (llmCap > 0 && _store.PendingLlmCount > 0)
         {
             var n = await _llmClassifier.ClassifyPendingAsync(llmCap, ct);

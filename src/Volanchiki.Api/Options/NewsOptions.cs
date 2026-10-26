@@ -7,8 +7,8 @@ public class NewsOptions
     /// <summary>Интервал опроса RSS, секунды (1–5 минут ок для кейса).</summary>
     public int PollIntervalSeconds { get; set; } = 180;
 
-    /// <summary>Сколько спорных/Прочее новостей уточнять LLM за один опрос (0 = выкл).</summary>
-    public int LlmClassifyPerPoll { get; set; } = 15;
+    /// <summary>Сколько новостей классифицировать LLM за один опрос (0 = выкл). Все новые идут в очередь.</summary>
+    public int LlmClassifyPerPoll { get; set; } = 40;
 
     public List<NewsFeedOptions> Feeds { get; set; } = new();
 }

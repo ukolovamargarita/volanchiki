@@ -3,8 +3,7 @@ using Xunit;
 
 namespace Volanchiki.Tests;
 
-// Правила классификатора. Контракт: однозначное совпадение — рубрика сразу; неоднозначное или отсутствие
-// совпадения — рубрика «по умолчанию» + флаг NeedsLlm (доработает лёгкая модель).
+// Правила дают provisional + кандидатов; NeedsLlm всегда true — рубрику ставит LLM.
 public class NewsClassifierTests
 {
     [Theory]
@@ -19,25 +18,25 @@ public class NewsClassifierTests
     [InlineData("США ввели новые санкции", "Санкции")]
     [InlineData("Выручка компании выросла на 20%", "Бизнес")]
     [InlineData("Введены пошлины на импорт", "Торговля")]
-    public void Clear_headline_gets_its_category_without_asking_the_model(string title, string expected)
+    public void Clear_headline_gets_provisional_category_and_always_asks_the_model(string title, string expected)
     {
         var r = NewsClassifier.Evaluate(title, "");
 
         Assert.Equal(expected, r.Category);
-        Assert.False(r.NeedsLlm);
-        Assert.Equal("rules", r.Source);
+        Assert.True(r.NeedsLlm);
+        Assert.Equal("rules_hint", r.Source);
         Assert.Single(r.MatchedTags);
         Assert.True(r.BusinessRelevant);
     }
 
     [Fact]
-    public void Region_news_is_clear_but_not_business_relevant()
+    public void Region_news_is_provisional_not_business_and_goes_to_model()
     {
         var r = NewsClassifier.Evaluate("Губернатор области открыл новый завод", "");
 
         Assert.Equal("Регион", r.Category);
         Assert.False(r.BusinessRelevant);
-        Assert.False(r.NeedsLlm);
+        Assert.True(r.NeedsLlm);
     }
 
     [Theory]
@@ -65,9 +64,8 @@ public class NewsClassifierTests
         Assert.True(r.NeedsLlm);
         Assert.Equal("rules_ambiguous", r.Source);
         Assert.Equal(2, r.MatchedTags.Count);
-        Assert.True(r.MatchedTags.Contains("Ставка"));
-        Assert.True(r.MatchedTags.Contains("Инфляция"));
-        // временная рубрика — первая по порядку правил
+        Assert.Contains("Ставка", r.MatchedTags);
+        Assert.Contains("Инфляция", r.MatchedTags);
         Assert.Equal("Ставка", r.Category);
     }
 
@@ -77,7 +75,7 @@ public class NewsClassifierTests
         var r = NewsClassifier.Evaluate("Новости дня", "Росстат опубликовал данные");
 
         Assert.Equal("Инфляция", r.Category);
-        Assert.False(r.NeedsLlm);
+        Assert.True(r.NeedsLlm);
     }
 
     [Theory]
@@ -86,7 +84,9 @@ public class NewsClassifierTests
     [InlineData("Медь подорожала на 5%", "Металлы")]
     public void Short_ambiguous_words_match_as_whole_words(string title, string expected)
     {
-        Assert.Equal(expected, NewsClassifier.Evaluate(title, "").Category);
+        var r = NewsClassifier.Evaluate(title, "");
+        Assert.Equal(expected, r.Category);
+        Assert.True(r.NeedsLlm);
     }
 
     [Theory]
@@ -103,7 +103,6 @@ public class NewsClassifierTests
     [Fact]
     public void Business_hint_keeps_unmatched_economic_text_relevant_for_the_feed()
     {
-        // правил нет, но слова про деньги и компании есть → в ленту попадёт, рубрику назначит модель
         var r = NewsClassifier.Evaluate("Компания привлекла 5 млрд рублей", "");
 
         Assert.Equal("Прочее", r.Category);
@@ -140,16 +139,15 @@ public class NewsClassifierTests
         var all = NewsClassifier.AllowedCategories;
 
         Assert.Equal(all.Length, all.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.True(all.Contains("Прочее"));
+        Assert.Contains("Прочее", all);
     }
 
-    // Известная проблема. Ключи длиннее трёх символов ищутся как подстрока, поэтому «реакция»
-    // (внутри «акци») получает «Финансы» уверенно, без передачи модели.
-    [Fact(Skip = "Известная проблема: «Реакция зрителей…» → «Финансы» без проверки моделью (подстрока «акци»)")]
-    public void Keyword_inside_an_unrelated_word_does_not_give_a_confident_category()
+    [Fact]
+    public void False_positive_rule_hit_still_goes_to_the_model()
     {
+        // «акци» внутри «Реакция» — provisional может быть Финансы, но LLM всё равно уточнит
         var r = NewsClassifier.Evaluate("Реакция зрителей на премьеру была тёплой", "");
 
-        Assert.True(r.NeedsLlm || r.Category == "Прочее");
+        Assert.True(r.NeedsLlm);
     }
 }

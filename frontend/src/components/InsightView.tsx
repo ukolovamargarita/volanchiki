@@ -11,8 +11,19 @@ const REL: Record<string, string> = {
   low: "Низкая значимость",
 };
 
-export function InsightView({ result, companyName }: { result: RunResult; companyName: string }) {
+export function InsightView({
+  result,
+  companyName,
+  busy,
+  onClarify,
+}: {
+  result: RunResult;
+  companyName: string;
+  busy?: boolean;
+  onClarify?: (question: string) => void;
+}) {
   const [vote, setVote] = useState<"up" | "down" | null>(null);
+  const [question, setQuestion] = useState("");
   const ins = result.insight;
   if (!ins) return null;
 
@@ -80,9 +91,41 @@ export function InsightView({ result, companyName }: { result: RunResult; compan
               )}
             </li>
           ))}
-          {!ins.sources.length && <li className="muted">Источники не указаны моделью</li>}
+          {!ins.sources.length && <li className="muted">Источники не найдены инструментами</li>}
         </ul>
       </section>
+
+      {onClarify && (
+        <section className="panel">
+          <h3>Уточнить инсайт</h3>
+          <p className="muted small" style={{ marginTop: -4 }}>
+            Другой разрез или вопрос — агент пересоберёт вывод с опорой на те же данные.
+          </p>
+          <textarea
+            className="input area"
+            rows={2}
+            value={question}
+            disabled={busy}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Например: а что это значит для кредитной нагрузки группы?"
+          />
+          <div className="row">
+            <button
+              type="button"
+              className="btn btn--red"
+              disabled={busy || question.trim().length < 3}
+              onClick={() => {
+                const q = question.trim();
+                if (q.length < 3) return;
+                onClarify(q);
+                setQuestion("");
+              }}
+            >
+              {busy ? "Считаем…" : "Уточнить"}
+            </button>
+          </div>
+        </section>
+      )}
 
       <TracePanel trace={result.trace} runId={result.runId} />
 

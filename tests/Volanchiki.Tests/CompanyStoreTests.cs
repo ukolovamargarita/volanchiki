@@ -166,8 +166,8 @@ public class CompanyStoreTests
     {
         var s = Store(new[]
         {
-            Co("small", revenue: 2_000_000_000m, group: "G1", loan: true),
-            Co("big", revenue: 9_000_000_000m, group: "G2", loan: true),
+            Co("small", revenue: 16_000_000_000m, group: "G1", loan: true),
+            Co("big", revenue: 40_000_000_000m, group: "G2", loan: true),
         });
 
         var res = s.PickDemoCandidates(10);
@@ -181,7 +181,7 @@ public class CompanyStoreTests
     {
         var s = Store(new[]
         {
-            Co("head", revenue: 5_000_000_000m, group: "G1"),
+            Co("head", revenue: 16_000_000_000m, group: "G1"),
             Co("sub", revenue: null, group: "G1", loan: true),
         });
 
@@ -189,5 +189,16 @@ public class CompanyStoreTests
 
         Assert.Single(res);
         Assert.Equal("sub", res[0].Id);
+    }
+
+    [Fact]
+    public void Demo_excludes_below_15bn_threshold()
+    {
+        var s = Store(new[]
+        {
+            Co("mid", revenue: 9_000_000_000m, group: "G1", loan: true),
+        });
+
+        Assert.Empty(s.PickDemoCandidates(10));
     }
 }

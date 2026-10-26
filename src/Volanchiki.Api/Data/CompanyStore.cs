@@ -114,13 +114,18 @@ public class CompanyStore
         }
     }
 
+    /// <summary>Крупный бизнес по кейсу: выручка компании или группы &gt; 15 млрд ₽.</summary>
+    public const decimal LargeBusinessThreshold = 15_000_000_000m;
+
     public IReadOnlyList<Company> PickDemoCandidates(int take = 10)
     {
         lock (_gate)
         {
             return _byId.Values
                 .Where(c => c.IsActiveClient && c.HasLoan)
-                .Where(c => (c.Revenue != null && c.Revenue > 1000) || GroupRevenue(c.GroupId) > 1_000_000_000m)
+                .Where(c =>
+                    (c.Revenue != null && c.Revenue >= LargeBusinessThreshold)
+                    || GroupRevenue(c.GroupId) >= LargeBusinessThreshold)
                 .OrderByDescending(c => GroupRevenue(c.GroupId))
                 .ThenByDescending(c => c.Revenue ?? 0)
                 .Take(take)

@@ -29,6 +29,21 @@ export function Workspace({ initialEvent }: { initialEvent?: string }) {
     }
   };
 
+  const clarify = async (question: string) => {
+    if (!company || !result?.runId) return;
+    setRunning(true);
+    setErr(null);
+    try {
+      const r = await api.clarifyInsight(result.runId, question);
+      if (r.status !== "ok" || !r.insight) throw new Error(r.error ?? "Агент не вернул результат");
+      setResult(r);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <div className="workspace">
       <div className="col left">
@@ -60,7 +75,14 @@ export function Workspace({ initialEvent }: { initialEvent?: string }) {
             </p>
           </section>
         )}
-        {result && company && <InsightView result={result} companyName={company.okvedName ?? company.id} />}
+        {result && company && (
+          <InsightView
+            result={result}
+            companyName={company.okvedName ?? company.id}
+            busy={running}
+            onClarify={clarify}
+          />
+        )}
       </div>
     </div>
   );

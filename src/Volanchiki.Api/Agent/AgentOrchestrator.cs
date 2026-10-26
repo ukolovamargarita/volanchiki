@@ -6,7 +6,11 @@ namespace Volanchiki.Api.Agent;
 
 public class AgentOrchestrator
 {
-    const int MaxSteps = 8;
+    const int MaxSteps = 10;
+    static readonly HashSet<string> AllowedTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "get_company_profile", "search_news", "search_alfa_analytics", "draft_insight",
+    };
 
     readonly LlmClient _llm;
     readonly Dictionary<string, IAgentTool> _tools;
@@ -20,13 +24,34 @@ public class AgentOrchestrator
     }
 
     public async Task<AgentRunResult> RunAsync(string companyId, string? newsHint, CancellationToken ct)
+        => await RunCoreAsync(companyId, newsHint, clarify: null, priorInsight: null, ct);
+
+    public async Task<AgentRunResult> ClarifyAsync(
+        string companyId, string? newsHint, string question, InsightCard prior, CancellationToken ct)
+        => await RunCoreAsync(companyId, newsHint, question, prior, ct);
+
+    async Task<AgentRunResult> RunCoreAsync(
+        string companyId,
+        string? newsHint,
+        string? clarify,
+        InsightCard? priorInsight,
+        CancellationToken ct)
     {
         var session = new AgentSession
         {
             CompanyId = companyId,
             NewsHint = newsHint,
         };
-        session.Note("start", detail: "company=" + companyId);
+        if (!string.IsNullOrWhiteSpace(clarify))
+            session.Scratch["clarify"] = clarify;
+        if (priorInsight != null)
+            session.Scratch["prior_insight"] = JsonSerializer.Serialize(priorInsight);
+
+        session.Note("start", detail: "company=" + companyId + (clarify != null ? "; clarify" : ""));
+
+        var llmPlanFails = 0;
+        var lastTool = "";
+        var sameToolStreak = 0;
 
         try
         {
@@ -34,7 +59,24 @@ public class AgentOrchestrator
             {
                 ct.ThrowIfCancellationRequested();
 
-                var decision = await DecideNextAsync(session, ct);
+                AgentDecision decision;
+                if (llmPlanFails >= 2 || !_llm.IsConfigured)
+                {
+                    decision = LocalPlan(session);
+                    if (llmPlanFails >= 2)
+                        session.Note("plan_fallback", detail: "local after llm fails");
+                }
+                else
+                {
+                    decision = await LlmPlanAsync(session, ct);
+                    if (decision.Action == "invalid")
+                    {
+                        llmPlanFails++;
+                        session.Note("plan_invalid", detail: decision.Reason);
+                        decision = LocalPlan(session);
+                    }
+                }
+
                 session.Note(decision.Action, decision.Tool, decision.Reason);
 
                 if (decision.Action == "finish")
@@ -43,10 +85,43 @@ public class AgentOrchestrator
                 if (decision.Action != "tool" || string.IsNullOrWhiteSpace(decision.Tool))
                     break;
 
+                if (!AllowedTools.Contains(decision.Tool))
+                {
+                    session.Note("tool_denied", decision.Tool);
+                    llmPlanFails++;
+                    continue;
+                }
+
+                // антизацикливание: тот же tool подряд без broaden → local
+                if (string.Equals(decision.Tool, lastTool, StringComparison.OrdinalIgnoreCase))
+                {
+                    sameToolStreak++;
+                    if (sameToolStreak >= 2 && decision.Tool != "search_news" && decision.Tool != "search_alfa_analytics")
+                    {
+                        session.Note("plan_loop", decision.Tool, "switch to local");
+                        llmPlanFails = 2;
+                        continue;
+                    }
+                }
+                else
+                {
+                    sameToolStreak = 0;
+                    lastTool = decision.Tool;
+                }
+
                 if (decision.Tool == "draft_insight" && !_llm.IsConfigured)
                 {
                     session.Note("skip_draft", detail: "no llm key");
                     break;
+                }
+
+                // уже есть результат — не зовём снова (кроме broaden-поиска)
+                if (decision.Tool != "draft_insight"
+                    && session.Scratch.ContainsKey(ScratchKey(decision.Tool))
+                    && !IsBroaden(decision))
+                {
+                    session.Note("tool_skip", decision.Tool, "already have");
+                    continue;
                 }
 
                 if (!_tools.TryGetValue(decision.Tool, out var tool))
@@ -55,52 +130,68 @@ public class AgentOrchestrator
                     break;
                 }
 
-                using var argsDoc = JsonDocument.Parse(decision.ArgsJson ?? "{}");
+                var argsJson = PrepareArgs(session, decision.Tool!, decision.ArgsJson, clarify);
+                using var argsDoc = JsonDocument.Parse(argsJson);
                 _log.LogInformation("agent {Run} -> {Tool}", session.RunId, tool.Name);
 
                 var result = await tool.ExecuteAsync(argsDoc.RootElement, session, ct);
                 session.Scratch["last_" + tool.Name] = result;
+                session.Scratch[ScratchKey(tool.Name)] = result;
                 if (tool.Name == "draft_insight")
                     session.Scratch["draft"] = result;
                 session.Note("tool_result", tool.Name, TraceSummary.ForTool(tool.Name, result));
-            }
 
-            // без draft — дожимаем сами (LLM-планировщик часто его пропускает)
-            if (!session.Scratch.ContainsKey("draft") && _llm.IsConfigured
-                && _tools.TryGetValue("draft_insight", out var ensureDraft))
-            {
-                if (!session.Scratch.ContainsKey("news")
-                    && _tools.TryGetValue("search_news", out var ensureNews))
+                // адаптация: пустая выдача → расширенный повторный поиск
+                if (tool.Name == "search_news" && !InsightSourceBuilder.HasNewsHits(session)
+                    && !session.Scratch.ContainsKey("news_broadened"))
                 {
-                    session.Note("ensure_news");
-                    using var newsArgs = JsonDocument.Parse(
-                        "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}");
-                    await ensureNews.ExecuteAsync(newsArgs.RootElement, session, ct);
+                    session.Scratch["news_broadened"] = "1";
+                    session.Scratch.Remove("news");
+                    session.Note("adapt_broaden_news", detail: "empty hits");
+                    if (_tools.TryGetValue("search_news", out var newsTool))
+                    {
+                        using var broad = JsonDocument.Parse("{\"query\":\"\",\"take\":8}");
+                        var again = await newsTool.ExecuteAsync(broad.RootElement, session, ct);
+                        session.Scratch["news"] = again;
+                        session.Scratch["last_search_news"] = again;
+                        session.Note("tool_result", "search_news", TraceSummary.ForTool("search_news", again));
+                    }
                 }
 
-                if (!session.Scratch.ContainsKey("alfa")
-                    && _tools.TryGetValue("search_alfa_analytics", out var ensureAlfa))
+                if (tool.Name == "search_alfa_analytics" && !InsightSourceBuilder.HasAlfaHits(session)
+                    && !session.Scratch.ContainsKey("alfa_broadened"))
                 {
-                    session.Note("ensure_alfa");
-                    using var alfaArgs = JsonDocument.Parse(
-                        "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}");
-                    await ensureAlfa.ExecuteAsync(alfaArgs.RootElement, session, ct);
+                    session.Scratch["alfa_broadened"] = "1";
+                    session.Scratch.Remove("alfa");
+                    session.Note("adapt_broaden_alfa", detail: "empty hits");
+                    if (_tools.TryGetValue("search_alfa_analytics", out var alfaTool))
+                    {
+                        var q = ShortTokens(session.NewsHint);
+                        using var broad = JsonDocument.Parse(
+                            "{\"query\":" + JsonSerializer.Serialize(q) + ",\"take\":5}");
+                        var again = await alfaTool.ExecuteAsync(broad.RootElement, session, ct);
+                        session.Scratch["alfa"] = again;
+                        session.Scratch["last_search_alfa_analytics"] = again;
+                        session.Note("tool_result", "search_alfa_analytics",
+                            TraceSummary.ForTool("search_alfa_analytics", again));
+                    }
                 }
-
-                session.Note("ensure_draft");
-                using var draftArgs = JsonDocument.Parse(
-                    "{\"topic\":" + JsonSerializer.Serialize(session.NewsHint) + "}");
-                await ensureDraft.ExecuteAsync(draftArgs.RootElement, session, ct);
             }
+
+            await EnsurePipelineAsync(session, clarify, ct);
 
             var insight = BuildInsight(session);
             var check = await SelfCheckAsync(session, insight, ct);
-            if (!check.Ok && _tools.TryGetValue("draft_insight", out var draft))
+            if (!check.Ok && _tools.TryGetValue("draft_insight", out var draftTool))
             {
                 session.Note("retry_draft", detail: check.FixHint);
-                using var fixArgs = JsonDocument.Parse(
-                    "{\"topic\":" + JsonSerializer.Serialize(session.NewsHint) + "}");
-                await draft.ExecuteAsync(fixArgs.RootElement, session, ct);
+                using var fixArgs = JsonDocument.Parse(JsonSerializer.Serialize(new
+                {
+                    topic = session.NewsHint,
+                    fix_hint = check.FixHint,
+                    clarify,
+                }));
+                await draftTool.ExecuteAsync(fixArgs.RootElement, session, ct);
                 insight = BuildInsight(session);
             }
 
@@ -127,11 +218,69 @@ public class AgentOrchestrator
         }
     }
 
-    Task<AgentDecision> DecideNextAsync(AgentSession session, CancellationToken ct)
+    async Task EnsurePipelineAsync(AgentSession session, string? clarify, CancellationToken ct)
     {
-        // без LLM-планировщика: light-модель зацикливалась на profile
-        // агентность = tools + порядок + self-check
-        return Task.FromResult(LocalPlan(session));
+        if (session.Scratch.ContainsKey("draft") || !_llm.IsConfigured)
+            return;
+
+        async Task RunTool(string name, string args)
+        {
+            if (!_tools.TryGetValue(name, out var tool)) return;
+            session.Note("ensure_" + name.Replace("search_", "").Replace("get_", ""));
+            using var doc = JsonDocument.Parse(args);
+            var result = await tool.ExecuteAsync(doc.RootElement, session, ct);
+            session.Scratch[ScratchKey(name)] = result;
+            session.Scratch["last_" + name] = result;
+            if (name == "draft_insight") session.Scratch["draft"] = result;
+            session.Note("tool_result", name, TraceSummary.ForTool(name, result));
+        }
+
+        if (!session.Scratch.ContainsKey("profile"))
+            await RunTool("get_company_profile", "{\"company_id\":" + JsonSerializer.Serialize(session.CompanyId) + "}");
+        if (!session.Scratch.ContainsKey("news"))
+            await RunTool("search_news", "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}");
+        if (!session.Scratch.ContainsKey("alfa"))
+            await RunTool("search_alfa_analytics", "{\"query\":" + JsonSerializer.Serialize(session.NewsHint ?? "") + "}");
+        if (!session.Scratch.ContainsKey("draft"))
+        {
+            await RunTool("draft_insight", JsonSerializer.Serialize(new
+            {
+                topic = session.NewsHint,
+                clarify,
+            }));
+        }
+    }
+
+    async Task<AgentDecision> LlmPlanAsync(AgentSession session, CancellationToken ct)
+    {
+        try
+        {
+            var have = string.Join(", ", session.Scratch.Keys.OrderBy(k => k));
+            var system =
+                "Ты планировщик агента. Ответь ТОЛЬКО JSON: " +
+                "{\"action\":\"tool\"|\"finish\",\"tool\":string|null,\"args\":object,\"reason\":string}. " +
+                "Разрешённые tool: get_company_profile, search_news, search_alfa_analytics, draft_insight. " +
+                "Не вызывай tool, результат которого уже есть в have. " +
+                "Сначала профиль, потом новости и/или аналитика, затем draft_insight. " +
+                "finish — только когда draft уже есть.";
+
+            var user =
+                $"company={session.CompanyId}\n" +
+                $"event={session.NewsHint}\n" +
+                $"have=[{have}]\n" +
+                $"news_hits={InsightSourceBuilder.HasNewsHits(session)}\n" +
+                $"alfa_hits={InsightSourceBuilder.HasAlfaHits(session)}";
+
+            var raw = await _llm.ChatAsync(system, user, _llm.PickModel(LlmRole.Light), 0f, ct);
+            var d = ParseDecision(raw);
+            if (d.Action == "tool" && (d.Tool == null || !AllowedTools.Contains(d.Tool)))
+                return new AgentDecision("invalid", d.Tool, null, "bad tool");
+            return d;
+        }
+        catch (Exception ex)
+        {
+            return new AgentDecision("invalid", null, null, ex.Message);
+        }
     }
 
     static AgentDecision LocalPlan(AgentSession session)
@@ -141,7 +290,7 @@ public class AgentOrchestrator
             return new AgentDecision(
                 "tool",
                 "get_company_profile",
-                "{\"company_id\":\"" + session.CompanyId + "\"}",
+                "{\"company_id\":" + JsonSerializer.Serialize(session.CompanyId) + "}",
                 "need profile");
         }
 
@@ -165,12 +314,14 @@ public class AgentOrchestrator
 
         if (!session.Scratch.ContainsKey("draft"))
         {
-            // без ключа draft не зовём — BuildInsight отдаст шаблон
-            // (IsConfigured проверим снаружи через ensure_draft)
             return new AgentDecision(
                 "tool",
                 "draft_insight",
-                "{\"topic\":" + JsonSerializer.Serialize(session.NewsHint) + "}",
+                JsonSerializer.Serialize(new
+                {
+                    topic = session.NewsHint,
+                    clarify = session.Scratch.GetValueOrDefault("clarify"),
+                }),
                 "need draft");
         }
 
@@ -181,16 +332,35 @@ public class AgentOrchestrator
         AgentSession session, InsightCard insight, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(insight.WhyMattersForCompany))
-            return (false, "no company link");
+            return (false, "no company link — свяжи вывод с ОКВЭД/продуктами/регионом из профиля");
+
+        if (!InsightSourceBuilder.HasAlfaHits(session)
+            && !string.IsNullOrWhiteSpace(insight.BankView)
+            && !insight.BankView.Contains("опоры", StringComparison.OrdinalIgnoreCase)
+            && !insight.BankView.Contains("нет", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, "нет hits аналитики банка — bank_view должен явно сказать, что опоры нет");
+        }
 
         if (!_llm.IsConfigured)
             return (true, null);
 
         try
         {
+            var ctx = new
+            {
+                insight,
+                has_news = InsightSourceBuilder.HasNewsHits(session),
+                has_alfa = InsightSourceBuilder.HasAlfaHits(session),
+                profile_present = session.Scratch.ContainsKey("profile"),
+                sources_count = insight.Sources.Count,
+            };
+
             var raw = await _llm.ChatAsync(
-                "Check insight. JSON: {\"ok\":true|false,\"fix_hint\":string|null}",
-                JsonSerializer.Serialize(insight),
+                "Проверь инсайт. Учти has_news/has_alfa/profile_present. " +
+                "JSON: {\"ok\":true|false,\"fix_hint\":string|null}. " +
+                "ok=false если нет связи с компанией, выдуманные факты или bank_view при has_alfa=false без признания отсутствия опоры.",
+                JsonSerializer.Serialize(ctx),
                 _llm.PickModel(LlmRole.Light),
                 0f,
                 ct);
@@ -220,19 +390,20 @@ public class AgentOrchestrator
             {
                 using var doc = JsonDocument.Parse(StripFence(draft));
                 var e = doc.RootElement;
+                var bank = InsightSourceBuilder.SanitizeBankView(Str(e, "bank_view"), session);
                 return new InsightCard
                 {
                     CompanyId = session.CompanyId,
                     Title = Str(e, "title") ?? "Инсайт",
                     WhatHappened = Str(e, "what_happened") ?? "",
                     WhyMattersForCompany = Str(e, "why_matters_for_company") ?? "",
-                    BankView = Str(e, "bank_view") ?? "",
+                    BankView = bank,
                     ModelView = Str(e, "model_view") ?? "",
                     Risks = StrArr(e, "risks"),
                     Opportunities = StrArr(e, "opportunities"),
                     SuggestedActions = StrArr(e, "suggested_actions"),
                     Relevance = Str(e, "relevance") ?? "medium",
-                    Sources = ParseSources(e),
+                    Sources = InsightSourceBuilder.FromSession(session, e),
                 };
             }
             catch (Exception ex)
@@ -249,22 +420,61 @@ public class AgentOrchestrator
             WhyMattersForCompany = session.Scratch.ContainsKey("profile")
                 ? "См. профиль компании (продукты, оквэд, группа)."
                 : "Мало данных.",
-            BankView = session.Scratch.ContainsKey("alfa")
-                ? "Аналитика банка загружена, но draft не собран."
-                : "Поиск по аналитике банка не выполнялся.",
+            BankView = InsightSourceBuilder.SanitizeBankView(null, session),
             ModelView = "Нет draft.",
             SuggestedActions = new List<string> { "Связаться с менеджером" },
             Relevance = "low",
-            Sources = new List<InsightSource>
-            {
-                new InsightSource
-                {
-                    Kind = "company_feature",
-                    Title = "profile",
-                    Excerpt = session.Scratch.GetValueOrDefault("profile"),
-                },
-            },
+            Sources = InsightSourceBuilder.FromSession(session),
         };
+    }
+
+    static string ScratchKey(string tool) => tool switch
+    {
+        "get_company_profile" => "profile",
+        "search_news" => "news",
+        "search_alfa_analytics" => "alfa",
+        "draft_insight" => "draft",
+        _ => tool,
+    };
+
+    static bool IsBroaden(AgentDecision d) =>
+        d.ArgsJson != null && d.ArgsJson.Contains("\"query\":\"\"", StringComparison.Ordinal);
+
+    static string PrepareArgs(AgentSession session, string tool, string? argsJson, string? clarify)
+    {
+        if (!string.Equals(tool, "draft_insight", StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson);
+            string? topic = session.NewsHint;
+            string? fix = null;
+            string? cl = clarify ?? session.Scratch.GetValueOrDefault("clarify");
+
+            if (doc.RootElement.TryGetProperty("topic", out var t) && t.ValueKind == JsonValueKind.String)
+                topic = t.GetString() ?? topic;
+            if (doc.RootElement.TryGetProperty("fix_hint", out var f) && f.ValueKind == JsonValueKind.String)
+                fix = f.GetString();
+            if (doc.RootElement.TryGetProperty("clarify", out var cq) && cq.ValueKind == JsonValueKind.String)
+                cl = cq.GetString() ?? cl;
+
+            return JsonSerializer.Serialize(new { topic, fix_hint = fix, clarify = cl });
+        }
+        catch
+        {
+            return JsonSerializer.Serialize(new { topic = session.NewsHint, clarify });
+        }
+    }
+
+    static string ShortTokens(string? q)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return "ставка инфляция макро";
+        var parts = q.Split(new[] { ' ', ',', '.', ':', ';', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => p.Length >= 4)
+            .Take(4);
+        var s = string.Join(' ', parts);
+        return string.IsNullOrWhiteSpace(s) ? q[..Math.Min(40, q.Length)] : s;
     }
 
     static AgentDecision ParseDecision(string raw)
@@ -275,29 +485,9 @@ public class AgentOrchestrator
         string? tool = null;
         if (e.TryGetProperty("tool", out var t) && t.ValueKind == JsonValueKind.String)
             tool = t.GetString();
-        string? argsJson = e.TryGetProperty("args", out var a) ? a.GetRawText() : null;
+        string? argsJson = e.TryGetProperty("args", out var a) ? a.GetRawText() : "{}";
         var reason = e.TryGetProperty("reason", out var r) ? r.GetString() : null;
         return new AgentDecision(action, tool, argsJson, reason);
-    }
-
-    static List<InsightSource> ParseSources(JsonElement e)
-    {
-        var list = new List<InsightSource>();
-        if (!e.TryGetProperty("sources", out var arr) || arr.ValueKind != JsonValueKind.Array)
-            return list;
-
-        foreach (var s in arr.EnumerateArray())
-        {
-            list.Add(new InsightSource
-            {
-                Kind = Str(s, "kind") ?? "news",
-                Title = Str(s, "title") ?? "",
-                Excerpt = Str(s, "excerpt"),
-                Url = Str(s, "url"),
-            });
-        }
-
-        return list;
     }
 
     static string? Str(JsonElement e, string name) =>

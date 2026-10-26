@@ -63,6 +63,34 @@ async function httpResilient<T>(path: string, init?: RequestInit, timeoutMs = 20
 
 type StartRunResponse = { runId: string; status: string };
 
+async function pollRun(runId: string): Promise<RunResult> {
+  const deadline = Date.now() + 180_000;
+  let netFails = 0;
+
+  while (Date.now() < deadline) {
+    await sleep(1500);
+    try {
+      const r = await http<RunResult>(`/api/insights/runs/${encodeURIComponent(runId)}`, undefined, 20000);
+      netFails = 0;
+      if (r.status === "running") continue;
+      return r;
+    } catch (e) {
+      if (isNetworkError(e)) {
+        netFails++;
+        if (netFails >= 25) {
+          throw new Error(
+            "Сеть нестабильна слишком долго. Обновите страницу — если расчёт успел завершиться, попробуйте ещё раз.",
+          );
+        }
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  throw new Error("Расчёт занял слишком много времени. Попробуйте ещё раз.");
+}
+
 async function runInsightLive(companyId: string, newsHint: string): Promise<RunResult> {
   const start = await httpResilient<StartRunResponse>(
     "/api/insights/run",
@@ -76,31 +104,22 @@ async function runInsightLive(companyId: string, newsHint: string): Promise<RunR
   );
 
   if (!start?.runId) throw new Error("Сервер не вернул runId");
+  return pollRun(start.runId);
+}
 
-  const deadline = Date.now() + 180_000;
-  let netFails = 0;
-
-  while (Date.now() < deadline) {
-    await sleep(1500);
-    try {
-      const r = await http<RunResult>(`/api/insights/runs/${encodeURIComponent(start.runId)}`, undefined, 20000);
-      netFails = 0;
-      if (r.status === "running") continue;
-      return r;
-    } catch (e) {
-      // обрыв на одном poll — считаем дальше, задача на сервере жива
-      if (isNetworkError(e)) {
-        netFails++;
-        if (netFails >= 25) {
-          throw new Error("Сеть нестабильна слишком долго. Обновите страницу — если расчёт успел завершиться, попробуйте ещё раз.");
-        }
-        continue;
-      }
-      throw e;
-    }
-  }
-
-  throw new Error("Расчёт занял слишком много времени. Попробуйте ещё раз.");
+async function clarifyLive(runId: string, question: string): Promise<RunResult> {
+  const start = await httpResilient<StartRunResponse>(
+    `/api/insights/runs/${encodeURIComponent(runId)}/clarify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ question }),
+    },
+    30000,
+    5,
+  );
+  if (!start?.runId) throw new Error("Сервер не вернул runId");
+  return pollRun(start.runId);
 }
 
 export const api = {
@@ -128,4 +147,7 @@ export const api = {
   // Старт + poll: смена сети не роняет уже идущий прогон на сервере
   runInsight: (companyId: string, newsHint: string): Promise<RunResult> =>
     USE_MOCK ? mockRun(companyId, newsHint) : runInsightLive(companyId, newsHint),
+
+  clarifyInsight: (runId: string, question: string): Promise<RunResult> =>
+    USE_MOCK ? mockRun("clarify", question) : clarifyLive(runId, question),
 };

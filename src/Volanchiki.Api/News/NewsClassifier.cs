@@ -1,8 +1,7 @@
 namespace Volanchiki.Api.News;
 
 /// <summary>
-/// Правила → однозначная рубрика.
-/// Несколько рубрик или «Прочее» → NeedsLlm (добивает лёгкая модель).
+/// Правила дают provisional-рубрику и кандидатов; итоговую тему всегда ставит LLM (NeedsLlm=true).
 /// </summary>
 public static class NewsClassifier
 {
@@ -47,22 +46,15 @@ public static class NewsClassifier
 
         matched = matched.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        if (matched.Count == 1)
+        // Правила — только подсказка для LLM; рубрику всегда подтверждает модель.
+        if (matched.Count >= 1)
         {
-            var tag = matched[0];
-            var business = Rules.First(r => r.Tag == tag).Business;
-            return new ClassifyResult(tag, business, NeedsLlm: false, matched, "rules");
-        }
-
-        if (matched.Count > 1)
-        {
-            // временная метка — первая по приоритету правил; LLM уточнит
             var provisional = matched[0];
             var business = matched.Any(t => Rules.First(r => r.Tag == t).Business);
-            return new ClassifyResult(provisional, business, NeedsLlm: true, matched, "rules_ambiguous");
+            var source = matched.Count == 1 ? "rules_hint" : "rules_ambiguous";
+            return new ClassifyResult(provisional, business, NeedsLlm: true, matched, source);
         }
 
-        // ничего не совпало
         var hintBiz = BusinessHints.Any(h => Matches(hay, h));
         return new ClassifyResult("Прочее", hintBiz, NeedsLlm: true, matched, "rules_other");
     }
