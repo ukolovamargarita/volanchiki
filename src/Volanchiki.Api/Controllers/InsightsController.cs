@@ -13,6 +13,7 @@ public class InsightsController : ControllerBase
     readonly CompanyStore _companies;
     readonly InsightRunStore _runs;
     readonly InsightRunGuard _guard;
+    readonly MetricsDb _metrics;
     readonly ILogger<InsightsController> _log;
 
     public InsightsController(
@@ -20,12 +21,14 @@ public class InsightsController : ControllerBase
         CompanyStore companies,
         InsightRunStore runs,
         InsightRunGuard guard,
+        MetricsDb metrics,
         ILogger<InsightsController> log)
     {
         _scopes = scopes;
         _companies = companies;
         _runs = runs;
         _guard = guard;
+        _metrics = metrics;
         _log = log;
     }
 
@@ -38,6 +41,11 @@ public class InsightsController : ControllerBase
     public class ClarifyRequest
     {
         public string Question { get; set; } = "";
+    }
+
+    public class VoteRequest
+    {
+        public string Vote { get; set; } = ""; // up | down
     }
 
     [HttpPost("run")]
@@ -55,7 +63,10 @@ public class InsightsController : ControllerBase
 
         var clientKey = ClientKey();
         if (!_guard.TryEnter(clientKey, out var err))
+        {
+            _metrics.RecordRateLimit(err ?? "rate_limited");
             return StatusCode(429, new { error = err });
+        }
 
         var job = _runs.Start(req.CompanyId, hint);
         _ = Task.Run(() => ExecuteJobAsync(job.RunId, req.CompanyId, hint, acquired: true));
@@ -110,13 +121,31 @@ public class InsightsController : ControllerBase
             return BadRequest(new { error = "question_too_long", max = 1000 });
 
         if (!_guard.TryEnter(ClientKey(), out var err))
+        {
+            _metrics.RecordRateLimit(err ?? "rate_limited");
             return StatusCode(429, new { error = err });
+        }
 
         var job = _runs.Start(prev.CompanyId, prev.NewsHint);
         var insight = prev.Result.Insight;
         _ = Task.Run(() => ExecuteClarifyAsync(job.RunId, prev.CompanyId, prev.NewsHint, q, insight));
 
         return Accepted(new { runId = job.RunId, status = "running", parentRunId = runId });
+    }
+
+    [HttpPost("runs/{runId}/vote")]
+    public IActionResult Vote(string runId, [FromBody] VoteRequest req)
+    {
+        var job = _runs.Get(runId);
+        if (job == null)
+            return NotFound(new { error = "run_not_found", runId });
+
+        var v = (req.Vote ?? "").Trim().ToLowerInvariant();
+        if (v is not ("up" or "down"))
+            return BadRequest(new { error = "vote_must_be_up_or_down" });
+
+        _metrics.RecordVote(runId, v);
+        return Ok(new { runId, vote = v });
     }
 
     async Task ExecuteJobAsync(string runId, string companyId, string? newsHint, bool acquired)

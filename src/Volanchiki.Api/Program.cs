@@ -33,6 +33,7 @@ builder.Services.AddSingleton<AlfaTxtLoader>();
 builder.Services.AddSingleton<NewsStore>();
 builder.Services.AddSingleton<InsightRunStore>();
 builder.Services.AddSingleton<InsightRunGuard>();
+builder.Services.AddSingleton<MetricsDb>();
 builder.Services.AddSingleton<RssNewsParser>();
 builder.Services.AddSingleton<NewsLlmClassifier>();
 builder.Services.AddHostedService<DataWarmupHostedService>();

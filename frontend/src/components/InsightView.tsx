@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api } from "../api";
 import type { RunResult } from "../types";
 import { SOURCE_LABELS } from "../format";
 import { Badge } from "./Badge";
@@ -138,7 +139,10 @@ export function InsightView({
             <button
               type="button"
               className={"vote-btn" + (vote === "up" ? " is-on" : "")}
-              onClick={() => setVote("up")}
+              onClick={() => {
+                setVote("up");
+                void api.voteInsight(result.runId, "up").catch(() => undefined);
+              }}
               aria-label="Полезно"
             >
               Полезно
@@ -146,7 +150,10 @@ export function InsightView({
             <button
               type="button"
               className={"vote-btn" + (vote === "down" ? " is-on" : "")}
-              onClick={() => setVote("down")}
+              onClick={() => {
+                setVote("down");
+                void api.voteInsight(result.runId, "down").catch(() => undefined);
+              }}
               aria-label="Не полезно"
             >
               Нет

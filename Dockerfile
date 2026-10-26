@@ -17,6 +17,8 @@ COPY --from=web /web/dist ./wwwroot
 COPY read_only ./read_only
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     DATA_COMPANY_DIR=read_only/company \
-    DATA_ALFA_DIR=read_only/from_alfa
+    DATA_ALFA_DIR=read_only/from_alfa \
+    METRICS_DB_PATH=data/metrics.db
+RUN mkdir -p /app/data
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Volanchiki.Api.dll"]

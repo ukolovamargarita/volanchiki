@@ -150,4 +150,13 @@ export const api = {
 
   clarifyInsight: (runId: string, question: string): Promise<RunResult> =>
     USE_MOCK ? mockRun("clarify", question) : clarifyLive(runId, question),
+
+  voteInsight: (runId: string, vote: "up" | "down"): Promise<{ runId: string; vote: string }> =>
+    USE_MOCK
+      ? Promise.resolve({ runId, vote })
+      : http(`/api/insights/runs/${encodeURIComponent(runId)}/vote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ vote }),
+        }),
 };

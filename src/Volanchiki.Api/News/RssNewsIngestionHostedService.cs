@@ -11,6 +11,7 @@ public class RssNewsIngestionHostedService : BackgroundService
     readonly NewsStore _store;
     readonly RssNewsParser _parser;
     readonly NewsLlmClassifier _llmClassifier;
+    readonly MetricsDb _metrics;
     readonly IOptionsMonitor<NewsOptions> _options;
     readonly ILogger<RssNewsIngestionHostedService> _log;
 
@@ -19,6 +20,7 @@ public class RssNewsIngestionHostedService : BackgroundService
         NewsStore store,
         RssNewsParser parser,
         NewsLlmClassifier llmClassifier,
+        MetricsDb metrics,
         IOptionsMonitor<NewsOptions> options,
         ILogger<RssNewsIngestionHostedService> log)
     {
@@ -26,6 +28,7 @@ public class RssNewsIngestionHostedService : BackgroundService
         _store = store;
         _parser = parser;
         _llmClassifier = llmClassifier;
+        _metrics = metrics;
         _options = options;
         _log = log;
     }
@@ -108,6 +111,7 @@ public class RssNewsIngestionHostedService : BackgroundService
         if (llmCap > 0 && _store.PendingLlmCount > 0)
         {
             var n = await _llmClassifier.ClassifyPendingAsync(llmCap, ct);
+            _metrics.RecordNewsClassify(n, _store.PendingLlmCount);
             if (n > 0)
                 _log.LogInformation("news: llm rubrics applied={N}, stillPending={P}", n, _store.PendingLlmCount);
         }

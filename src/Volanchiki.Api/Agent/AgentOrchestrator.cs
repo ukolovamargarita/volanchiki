@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using Volanchiki.Api.Data;
 using Volanchiki.Api.Domain;
 using Volanchiki.Api.Llm;
 
@@ -14,12 +16,18 @@ public class AgentOrchestrator
 
     readonly LlmClient _llm;
     readonly Dictionary<string, IAgentTool> _tools;
+    readonly MetricsDb _metrics;
     readonly ILogger<AgentOrchestrator> _log;
 
-    public AgentOrchestrator(LlmClient llm, IEnumerable<IAgentTool> tools, ILogger<AgentOrchestrator> log)
+    public AgentOrchestrator(
+        LlmClient llm,
+        IEnumerable<IAgentTool> tools,
+        MetricsDb metrics,
+        ILogger<AgentOrchestrator> log)
     {
         _llm = llm;
         _tools = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        _metrics = metrics;
         _log = log;
     }
 
@@ -48,6 +56,8 @@ public class AgentOrchestrator
             session.Scratch["prior_insight"] = JsonSerializer.Serialize(priorInsight);
 
         session.Note("start", detail: "company=" + companyId + (clarify != null ? "; clarify" : ""));
+        var sw = Stopwatch.StartNew();
+        var isClarify = !string.IsNullOrWhiteSpace(clarify);
 
         var llmPlanFails = 0;
         var lastTool = "";
@@ -184,6 +194,7 @@ public class AgentOrchestrator
             var check = await SelfCheckAsync(session, insight, ct);
             if (!check.Ok && _tools.TryGetValue("draft_insight", out var draftTool))
             {
+                session.Scratch["self_check_retried"] = "1";
                 session.Note("retry_draft", detail: check.FixHint);
                 using var fixArgs = JsonDocument.Parse(JsonSerializer.Serialize(new
                 {
@@ -196,6 +207,8 @@ public class AgentOrchestrator
             }
 
             session.Note("done");
+            sw.Stop();
+            RecordMetrics(session, "ok", isClarify, sw.ElapsedMilliseconds, insight);
             return new AgentRunResult
             {
                 RunId = session.RunId,
@@ -208,6 +221,8 @@ public class AgentOrchestrator
         {
             _log.LogError(ex, "agent failed {Run}", session.RunId);
             session.Note("error", detail: ex.Message);
+            sw.Stop();
+            RecordMetrics(session, "error", isClarify, sw.ElapsedMilliseconds, null);
             return new AgentRunResult
             {
                 RunId = session.RunId,
@@ -216,6 +231,21 @@ public class AgentOrchestrator
                 Error = ex.Message,
             };
         }
+    }
+
+    void RecordMetrics(AgentSession session, string status, bool isClarify, long ms, InsightCard? insight)
+    {
+        _metrics.RecordRun(
+            session.RunId,
+            session.CompanyId,
+            status,
+            isClarify,
+            ms,
+            insight?.Sources.Count ?? 0,
+            InsightSourceBuilder.HasNewsHits(session),
+            InsightSourceBuilder.HasAlfaHits(session),
+            session.Scratch.GetValueOrDefault("self_check"),
+            session.Scratch.ContainsKey("self_check_retried"));
     }
 
     async Task EnsurePipelineAsync(AgentSession session, string? clarify, CancellationToken ct)
@@ -332,18 +362,25 @@ public class AgentOrchestrator
         AgentSession session, InsightCard insight, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(insight.WhyMattersForCompany))
+        {
+            session.Scratch["self_check"] = "fail";
             return (false, "no company link — свяжи вывод с ОКВЭД/продуктами/регионом из профиля");
+        }
 
         if (!InsightSourceBuilder.HasAlfaHits(session)
             && !string.IsNullOrWhiteSpace(insight.BankView)
             && !insight.BankView.Contains("опоры", StringComparison.OrdinalIgnoreCase)
             && !insight.BankView.Contains("нет", StringComparison.OrdinalIgnoreCase))
         {
+            session.Scratch["self_check"] = "fail";
             return (false, "нет hits аналитики банка — bank_view должен явно сказать, что опоры нет");
         }
 
         if (!_llm.IsConfigured)
+        {
+            session.Scratch["self_check"] = "skip";
             return (true, null);
+        }
 
         try
         {
@@ -371,11 +408,13 @@ public class AgentOrchestrator
             if (doc.RootElement.TryGetProperty("fix_hint", out var h) && h.ValueKind == JsonValueKind.String)
                 hint = h.GetString();
 
+            session.Scratch["self_check"] = ok ? "ok" : "fail";
             session.Note("self_check", detail: ok ? "ok" : hint);
             return (ok, hint);
         }
         catch
         {
+            session.Scratch["self_check"] = "skip";
             return (true, null);
         }
     }
